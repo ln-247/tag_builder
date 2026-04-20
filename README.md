@@ -1,1 +1,14 @@
-# tag_builder
+## tag_builder
+tag_builder/
+├── backend/
+│   ├── main.py
+│   ├── database.py
+│   └── processing.py
+├── frontend/
+│   └── app.py
+├── data/
+│   └── app.db
+├── requirements.txt
+└── README.md
+
+Данный сервис обрабатывает входную таблицу с тегами и в резулььтате выждает уже готовую в импорту таблицу с добавленным необходимыми тегами
