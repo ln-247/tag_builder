@@ -2,8 +2,10 @@ import pandas as pd
 import numpy as np
 from pathlib import Path # для определения расширения файла - путь файла
 
-# не забыть в конце удалить дубликаты
-# логгирование для трендов добавить возможен выбор для каких тегов
+import json
+import sqlite3
+import tempfile
+
 # может еще сделать обработку файла с тегами из базы данных 
 # типа привести в норм вид, чтобы можно было посомтреть шкалы и тревоги например
 
@@ -237,6 +239,10 @@ def app_mv_func(table_result):
 def app_mode_func(table_result):
     app_mode = table_result[table_result["type"] == 'app'].copy()
     app_mode['name'] = app_mode['name'].astype(str).str.replace("_PV", "_MODE", regex=False)
+    app_mode['scale_min'] = 0
+    app_mode['scale_max'] = 1
+    app_mode['dec'] = np.nan
+    app_mode['unit'] = np.nan
     app_mode['type'] = 'app_mode'
     table_result = pd.concat([app_mode, table_result], ignore_index=True)
     return table_result
@@ -244,6 +250,10 @@ def app_mode_func(table_result):
 def app_upr_func(table_result):
     app_upr = table_result[table_result["type"] == 'app'].copy()
     app_upr['name'] = app_upr['name'].astype(str).str.replace("_PV", "_UPR", regex=False)
+    app_upr['scale_min'] = 0
+    app_upr['scale_max'] = 1
+    app_upr['dec'] = np.nan
+    app_upr['unit'] = np.nan
     app_upr['type'] = 'app_upr'
     table_result = pd.concat([app_upr, table_result], ignore_index=True)
     return table_result
@@ -251,10 +261,62 @@ def app_upr_func(table_result):
 def app_paz_func(table_result):
     app_paz = table_result[table_result["type"] == 'app'].copy()
     app_paz['name'] = app_paz['name'].astype(str).str.replace("_PV", "_PAZ", regex=False)
+    app_paz['scale_min'] = 0
+    app_paz['scale_max'] = 1
+    app_paz['dec'] = np.nan
+    app_paz['unit'] = np.nan
     app_paz['type'] = 'app_paz'
     table_result = pd.concat([app_paz, table_result], ignore_index=True)
     return table_result
 
 def convert_for_download(table_result):
-    table_result  = table_result.drop(columns=["name_copy", "type"])
-    return table_result.to_csv(index=False, sep=",").encode("utf-8")
+    table_result = table_result.drop(columns=["name_copy", "type"])
+    table_result = table_result.drop_duplicates()
+    return table_result
+
+def extract_alarm_columns(alarms):
+    lst = {"lo": np.nan, "hi": np.nan, "lolo": np.nan, "hihi": np.nan, "discrete_alarm_value": np.nan}
+    if alarms is None:
+        return pd.Series(lst)
+    
+    if isinstance(alarms, bytes):
+       alarms = alarms.decode("utf-8")
+    if isinstance(alarms, str):
+        alarms = json.loads(alarms)
+
+    if not isinstance(alarms, list):
+        return pd.Series(lst)
+    
+    for alarm in alarms:
+        if not alarm.get("enabled", False):
+            continue
+        alarm_type = int(alarm.get("type"))
+
+        if alarm_type == 1:
+            lst["lo"] = alarm.get("value")
+        elif alarm_type == 2:
+            lst["hi"] = alarm.get("value")
+        elif alarm_type == 3:
+            lst["lolo"] = alarm.get("value")
+        elif alarm_type == 4:
+            lst["hihi"] = alarm.get("value")
+        elif alarm_type == 6:
+            lst["discrete_alarm_value"] = int(alarm.get("value"))
+   
+    return pd.Series(lst)
+
+def load_tags_from_db(uploaded_db):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_file:
+        tmp_file.write(uploaded_db.getbuffer())
+        tmp_db_path = tmp_file.name
+    conn = sqlite3.connect(tmp_db_path)
+    tags = pd.read_sql_query("SELECT * FROM tags", conn)
+    conn.close()
+    alarm_columns = tags["alarm_set"].apply(extract_alarm_columns)
+    for colmn in ["lo", "hi", "lolo", "hihi", "discrete_alarm_value"]:
+        tags[colmn] = alarm_columns[colmn]
+    return tags
+
+def prepare_tags_for_download(tags):
+    tags_dwnld = tags.drop(columns=["alarm_set", "id"], errors="ignore")
+    return tags_dwnld

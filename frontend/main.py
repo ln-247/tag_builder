@@ -1,33 +1,34 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from io import StringIO # для загрузки файла
+
 from pathlib import Path # для определения расширения файла - путь файла
 
 import sys
+
+
 project_root = Path(__file__).resolve().parent.parent # без этого не видел папку бэкэнд
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from backend.processing import (read_file, normalize_tags_table,add_prefix, add_pv,units_normalize, br_analog_func,
                                 br_reg_func, br_regc_func, br_device_func, br_discret_func, add_tags_for_reg_func,
-                                logging_reg, app_mv_func, app_mode_func, app_upr_func, app_paz_func, convert_for_download)
+                                logging_reg, app_mv_func, app_mode_func, app_upr_func, app_paz_func, convert_for_download,
+                                load_tags_from_db, prepare_tags_for_download)
 
 st.markdown("Давай сделаем что-то с этим")
 
+tab1, tab2, tab3 = st.tabs(["Tag Builder", "Работа с project.db", "Групповые тренды"])
+with tab1:
 # Ввод имени
-name_project = st.text_input("Ввести имя проекта:", placeholder="Проект")
-name_system = st.text_input("Ввести систему управления:", placeholder="Система управления (например, Siemens, CentumVP, Delta V)")
+    name_project = st.text_input("Ввести имя проекта:", placeholder="Проект")
+    name_system = st.text_input("Ввести систему управления:", placeholder="Система управления (например, Siemens, CentumVP, Delta V)")
 
-uploaded_file = st.file_uploader("Загрузить файл", type=["csv", "xlsx", "xls", "ods"])
-if uploaded_file is not None:
-    tags_table = read_file(uploaded_file)
-    table_result = normalize_tags_table(tags_table)
-    #st.dataframe(table_result.head(20))
+    uploaded_file = st.file_uploader("Загрузить файл", type=["csv", "xlsx", "xls", "ods"])
+    if uploaded_file is not None:
+        tags_table = read_file(uploaded_file)
+        table_result = normalize_tags_table(tags_table)
+        #st.dataframe(table_result.head(20))
 
-#col_1, col_2 = st.columns(2)
-
-#with col_1:
     prefix = st.text_input("Ввести префикc для тегов, начинающихся с цифры:", placeholder= "Например, K_ или M_")
     if prefix:
         table_result = add_prefix(table_result, prefix)
@@ -89,19 +90,28 @@ if uploaded_file is not None:
            table_result = app_upr_func(table_result)
         if 'PAZ' in app_tags:
            table_result = app_paz_func(table_result)   
-
-if uploaded_file is not None:
-    st.dataframe(table_result)
             
-if st.button("Подготовить для скачивания"):
-    tags_table_dnwl = convert_for_download(table_result)
-    file_name = f"{name_project}_tags.csv"
-    st.download_button(label="Скачать csv", data=tags_table_dnwl, file_name=file_name, mime="text/csv")
+    if st.button("Подготовить для скачивания"):
+        tags_table_dnwl = convert_for_download(table_result)
+        st.dataframe(tags_table_dnwl)
+        table_result_csv = tags_table_dnwl.to_csv(index=False, sep=",").encode("utf-8")
+        file_name = f"{name_project}_tags.csv"
+        st.download_button(label="Скачать csv", data=table_result_csv, file_name=file_name, mime="text/csv")
 
-#with col_2:
- #   st.caption("One")
-#st.caption("Two", divider=True)
-#st.caption("Three", divider=True)
-#st.caption(prefix, divider=True)
-#st.markdown("This is a subheader with a divider")
-#st.write("You selected:", options)
+with tab2:
+    uploaded_db = st.file_uploader("Загрузить файл", type=["db"])
+    if uploaded_db is not None:
+        tags = load_tags_from_db(uploaded_db)
+        
+        if st.button("Подготовить для скачивания "):
+            tags_dwnld = prepare_tags_for_download(tags)
+            st.dataframe(tags_dwnld)
+            csv_data = tags_dwnld.to_csv(index=False, sep=",").encode("utf-8")
+            st.download_button(label="Скачать csv",data=csv_data,file_name="tags.csv",mime="text/csv")
+        
+        
+
+
+
+    #db_path = r"H:\111\учеба\notebooks\tag_builder\project.db"
+    
