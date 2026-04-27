@@ -6,8 +6,7 @@ import json
 import sqlite3
 import tempfile
 
-# может еще сделать обработку файла с тегами из базы данных 
-# типа привести в норм вид, чтобы можно было посомтреть шкалы и тревоги например
+#TAG BUILDER
 
 def read_file(taglist_file):
     file_type = Path(taglist_file.name).suffix.lower()
@@ -20,10 +19,7 @@ def read_file(taglist_file):
     else:
         raise ValueError(f"Неподдерживаемый тип файла: {file_type}")
     return tags_table
-"""
-Формат импорта в программу подразумевает стандартное количество столбцов со стандартными именами, 
-разделитель запятая, возможно еще подумаю про точку с запятой
-"""
+
 def normalize_tags_table(tags_table):
     columns = ["scale_min","scale_max","lolo","lo","hi","hihi"]
     for colmn in columns: # заменить запятую на точку в числовых значениях
@@ -270,9 +266,12 @@ def app_paz_func(table_result):
     return table_result
 
 def convert_for_download(table_result):
-    table_result = table_result.drop(columns=["name_copy", "type"])
+    table_result = table_result.drop(columns=["name_copy", "type"], errors="ignore")
     table_result = table_result.drop_duplicates()
     return table_result
+
+
+#РАБОТА С PROJECT.DB
 
 def extract_alarm_columns(alarms):
     lst = {"lo": np.nan, "hi": np.nan, "lolo": np.nan, "hihi": np.nan, "discrete_alarm_value": np.nan}
@@ -320,3 +319,130 @@ def load_tags_from_db(uploaded_db):
 def prepare_tags_for_download(tags):
     tags_dwnld = tags.drop(columns=["alarm_set", "id"], errors="ignore")
     return tags_dwnld
+
+
+#ПРЕДОБРАБОТКА ТАБЛИЦЫ
+
+def normalize_pre_table(pre_table):
+    table = pd.DataFrame()
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["tag", "name", "имя", "тег"]):
+            table["name"] = pre_table.pop(clmn)
+            break
+    
+    found_desc = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["desc", "комментарий", "описание", "comm"]):
+            table["desc"] = pre_table.pop(clmn)
+            found_desc = True
+            break
+    if not found_desc:
+        table["desc"] = np.nan
+
+    found_max = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["max", "мах", "sh"]):
+            table["scale_max"] = pre_table.pop(clmn)
+            found_max = True
+            break
+    if not found_max:
+        table["scale_max"] = np.nan
+
+    found_min = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["min", "мин", "sl"]):
+            table["scale_min"] = pre_table.pop(clmn)
+            found_min = True
+            break
+    if not found_min:
+        table["scale_min"] = np.nan
+
+    found_unit = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["unit", "ед"]):
+            table["unit"] = pre_table.pop(clmn)
+            found_unit = True
+            break
+    if not found_unit:
+        table["unit"] = np.nan
+
+    found_dec = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["dec"]):
+            table["dec"] = pre_table.pop(clmn)
+            found_dec = True
+            break
+    if not found_dec:
+        table["dec"] = np.nan
+
+    found_lolo = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if "lolo" in clmn_lower or clmn_lower == "ll":
+            table["lolo"] = pre_table.pop(clmn)
+            found_lolo = True
+            break
+    if not found_lolo:
+        table["lolo"] = np.nan
+
+    found_lo = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if "lo" in clmn_lower or clmn_lower == "l":
+            table["lo"] = pre_table.pop(clmn)
+            found_lo = True
+            break
+    if not found_lo:
+        table["lo"] = np.nan
+
+    found_hihi = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if "hihi" in clmn_lower or clmn_lower == "hh":
+            table["hihi"] = pre_table.pop(clmn)
+            found_hihi = True
+            break
+    if not found_hihi:
+        table["hihi"] = np.nan
+
+    found_hi = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if "hi" in clmn_lower or clmn_lower == "h":
+            table["hi"] = pre_table.pop(clmn)
+            found_hi = True
+            break
+    if not found_hi:
+        table["hi"] = np.nan
+
+    found_type = False
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+        if any(word in clmn_lower for word in ["type","тип"]):
+            table["type"] = pre_table.pop(clmn)
+            found_type = True
+            break
+    if not found_type:
+        table["type"] = np.nan
+
+    return table
+"""
+def get_dec_from_row(row):
+    for clmn in list(pre_table.columns):
+        clmn_lower = clmn.lower()
+    for col in ["scale_min", "scale_max"]:
+        x = row[col]
+        if pd.notna(x):
+            x = str(x).replace(",", ".").strip()
+            if "." in x:
+                return len(x.split(".")[1].rstrip("0"))
+            return 0
+    return 0
+
+"""
