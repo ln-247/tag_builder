@@ -81,6 +81,11 @@ GET /feedback
 * систему управления
 * текст сообщения
 
+## Установка зависимостей
+```bash
+pip install -r requirements.txt
+```
+
 ## Запуск backend
 Backend запускается отдельно через Uvicorn.
 ```bash
