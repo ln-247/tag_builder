@@ -65,7 +65,11 @@ def normalize_tags_table(tags_table):
     table_result.loc[type_3, "tag_type"] = 3 #type discret
 
     # fire discret alarm
-    table_result.loc[type_3, "discrete_alarm_value"] = 1 
+    table_result.loc[type_3, "discrete_alarm_value"] = 1
+
+    table_result.loc[type_3, "dec"] = np.nan # у дискретников нет шкалы и нет dec
+    table_result.loc[type_3, "scale_min"] = np.nan
+    table_result.loc[type_3, "scale_max"] = np.nan
 
     type_app = table_result["type"] == "app" # расставить шкалу для аппаратов где не заполнено
     table_result.loc[type_app, "scale_min"] = table_result["scale_min"].fillna(0)
@@ -191,6 +195,10 @@ def add_tags_for_reg_func(table_result):
     sv_reg = table_result[table_result["type"] == 'reg'].copy()
     sv_reg['name'] = sv_reg['name'].astype(str).str.replace("_PV", "_SV", regex=False)
     sv_reg['type'] = 'sv_reg'
+    sv_reg['lolo'] = np.nan
+    sv_reg['lo'] = np.nan
+    sv_reg['hi'] = np.nan
+    sv_reg['hihi'] = np.nan
 
     mv_reg = table_result[table_result["type"] == 'reg'].copy()
     mv_reg['name'] = mv_reg['name'].astype(str).str.replace("_PV", "_MV", regex=False)
@@ -323,6 +331,20 @@ def prepare_tags_for_download(tags):
 
 #ПРЕДОБРАБОТКА ТАБЛИЦЫ
 
+def read_pre_file(taglist_file): # новый обработчик файлов так как нужно будет потом забрать знаки после запятой
+    file_type = Path(taglist_file.name).suffix.lower()
+
+    if file_type == ".csv":
+        pre_table = pd.read_csv(taglist_file, dtype=str)
+    elif file_type in [".xlsx", ".xls"]:
+        pre_table = pd.read_excel(taglist_file, dtype=str)
+    elif file_type == ".ods":
+        pre_table = pd.read_excel(taglist_file, engine="odf", dtype=str)
+    else:
+        raise ValueError(f"Неподдерживаемый тип файла: {file_type}")
+
+    return pre_table
+
 def normalize_pre_table(pre_table):
     table = pd.DataFrame()
     for clmn in list(pre_table.columns):
@@ -432,17 +454,19 @@ def normalize_pre_table(pre_table):
         table["type"] = np.nan
 
     return table
-"""
-def get_dec_from_row(row):
-    for clmn in list(pre_table.columns):
-        clmn_lower = clmn.lower()
-    for col in ["scale_min", "scale_max"]:
-        x = row[col]
-        if pd.notna(x):
-            x = str(x).replace(",", ".").strip()
-            if "." in x:
-                return len(x.split(".")[1].rstrip("0"))
-            return 0
-    return 0
 
-"""
+def get_dec_from_row(row): # получение числа знаков после запятой
+    col_for_dec = None 
+    for clmn in row.index: 
+        clmn_lower = clmn.lower() 
+        if "min" in clmn_lower: 
+            col_for_dec = clmn 
+            break 
+        if "max" in clmn_lower: 
+            col_for_dec = clmn 
+            if col_for_dec is None: 
+                return 0 
+            x = str(row[col_for_dec]).replace(",", ".") 
+            if "." in x: 
+                return len(x.split(".")[1]) 
+            return 0

@@ -1,21 +1,21 @@
 import streamlit as st
 import pandas as pd
 
+import requests
+
 from pathlib import Path # для определения расширения файла - путь файла
 
 import sys
-#прикольно еще бы сделать владку отзывов и предложений, ну типа кто-то попользовался, нашел глюк
-# хотела сделать поле имя человека, имя проекта, система управления и само сообщение, 
-# это как форма для ввода, потом ее передать в таблицу, ну а в таблице уже я сама могу 
-# обрабатывать и там уже автоматически проставится дата, ид сообщения и статус я потом 
-# буду сама менять когда захочу, а внизу под формой будет просто история, 
-# типа вот такого-то числа вот то-то поправлено и смогу потом еще лично написать человеку если что
+
+API_URL = "http://127.0.0.1:8000"
+
 
 project_root = Path(__file__).resolve().parent.parent # без этого не видел папку бэкэнд
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 import backend.processing as pr 
+
 
 st.markdown("Давай сделаем что-то с этим")
 
@@ -25,27 +25,21 @@ tab1, tab2, tab3, tab4 = st.tabs(["Предобработка таблицы", "
 
 with tab1:
     uploaded_file_2 = st.file_uploader("Загрузить файл ", type=["csv", "xlsx", "xls", "ods"])
+
     if uploaded_file_2 is not None:
-        pre_table = pr.read_file(uploaded_file_2)
+        pre_table = pr.read_pre_file(uploaded_file_2)
+
         table = pr.normalize_pre_table(pre_table)
+        dec = st.checkbox("Рассчитать знаки после запятой")
+        if dec:
+            table["dec"] = table.apply(pr.get_dec_from_row, axis=1) 
 
-        dec = st.checkbox("Рассчитать знак после запятой")
-        #if dec:
-           # ваыtable["dec"] = table.apply(pr.get_dec_from_row, axis=1)
-        st.dataframe(table)
-        
-
-
-
-
-
-
-
-
-
-
-
-
+        if st.button("Подготовить для скачивания "):
+                st.dataframe(table)
+                pre_table_result_csv = table.to_csv(index=False, sep=",").encode("utf-8")
+                file_name = "tags.csv"
+                st.download_button(label="Скачать csv", data=pre_table_result_csv, file_name=file_name, mime="text/csv")
+    
 #TAG BUILDER
 
 with tab2:
@@ -135,15 +129,71 @@ with tab3:
     if uploaded_db is not None:
         tags = pr.load_tags_from_db(uploaded_db)
         
-        if st.button("Подготовить для скачивания "):
+        if st.button("Подготовить для скачивания   "):
             tags_dwnld = pr.prepare_tags_for_download(tags)
             st.dataframe(tags_dwnld)
             csv_data = tags_dwnld.to_csv(index=False, sep=",").encode("utf-8")
             st.download_button(label="Скачать csv",data=csv_data,file_name="tags.csv",mime="text/csv")
 
+# ОБРАТНАЯ СВЯЗЬ
 
+if "feedback_df" not in st.session_state: # добавим, чтобы не затиралось при каком-то действии
+    st.session_state.feedback_df = None
+with tab4:
+    with st.form(" "):
+        name_human = st.text_input("Ввести имя:") 
+        name_project_fb = st.text_input("Ввести имя проекта: ")
+        name_system_fb = st.text_input("Ввести систему управления: ")
+        message_fb = st.text_area("Ввести сообщение:")
+        
+        submit_button = st.form_submit_button(label="Отправить")
 
+    if submit_button:
+        if message_fb.strip() == "":
+            st.warning("Сообщение не должно быть пустым")
+        else:
+            feedback_data = {
+                "name_human": name_human,
+                "name_project": name_project_fb,
+                "name_system": name_system_fb,
+                "message": message_fb}
 
+            try:
+                response = requests.post(
+                    f"{API_URL}/feedback",
+                    json=feedback_data,
+                    timeout=5)
+                if response.status_code == 200:
+                    st.success("Сообщение сохранено через API")
+                else:
+                    st.error(f"Ошибка API: {response.text}")
+
+            except requests.exceptions.RequestException as error:
+                st.error(f"Не удалось подключиться к backend: {error}")
+    st.divider()
+
+    if st.button("Посмотреть текущие отзывы"):
+        try:
+            response = requests.get(
+                f"{API_URL}/feedback",
+                timeout=5)
+            if response.status_code == 200:
+                feedback_list = response.json()
+                if len(feedback_list) == 0:
+                    st.info("Пока нет сохранённых отзывов")
+                    st.session_state.feedback_df = None
+                else:
+                    st.session_state.feedback_df = pd.DataFrame(feedback_list)
+            else:
+                st.error(f"Ошибка API: {response.text}")
+
+        except requests.exceptions.RequestException as error:
+            st.error(f"Не удалось подключиться к backend: {error}")
+    
+    if st.session_state.feedback_df is not None:
+        st.dataframe(
+            st.session_state.feedback_df,
+            use_container_width=True)
 
 
 
