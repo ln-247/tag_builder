@@ -8,3 +8,4 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+data/*.db
